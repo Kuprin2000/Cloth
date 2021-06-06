@@ -8,7 +8,6 @@ var frame_time = 1000 / 25;     //время одного кадра
 
 //вершинный шейдер
 const VSHADER_SOURCE =
-
 'attribute vec4 a_Position;\n' +
 'attribute vec4 a_FragColor;\n' +
 'varying vec4 v_FragColor;\n' +
@@ -66,6 +65,10 @@ class ClothSimulator
         //инициализируем массив напряжений
         this.stress = new Float32Array(this.m * this.n);
         this.initializeStress();
+
+        //инициализируем массив с информацией о том, сколько смежных ребер у каждой вершины
+        this.edges_per_node = new Array(this.m * this.n);
+        this.initializeEdgesPerNode();
 
         //инициализируем массив цветов
         this.color = new Float32Array(3 * this.m * this.n);
@@ -186,6 +189,41 @@ class ClothSimulator
         }
     }
 
+    //функция, инициализирущая массив с информацией о том, сколько смежных ребер у каждой вершины
+    initializeEdgesPerNode()
+    {
+        //задаем смещение по строке в массиве с информацией о ребрах
+        let row_delta = this.m;
+
+        for (let i = 0; i < this.m; ++i)
+        {
+            if (i == 0 || i == this.m - 1)
+            {
+                this.edges_per_node[i] = 2;
+                this.edges_per_node[(this.n - 1) * row_delta + i] = 2;
+            }
+            else
+            {
+                this.edges_per_node[i] = 3;
+                this.edges_per_node[(this.n - 1) * row_delta + i] = 3
+            }
+        }
+
+        for (let i = 1; i < this.n - 1; ++i)
+        {
+            this.edges_per_node[i * row_delta] = 3;
+            this.edges_per_node[i * row_delta + this.m - 1] = 3;
+        }
+
+        for (let i = 1; i < this.n - 1; ++i)
+        {
+            for (let j = 1; j < this.m - 1; ++j)
+            {
+                this.edges_per_node[i * row_delta + j] = 4;
+            }
+        }
+    }
+
     //функция, инициализируюзая список закрепленных по умолчанию узлов
     initializeLockedNodes()
     {
@@ -218,6 +256,10 @@ class ClothSimulator
         //инициализируем начальное напряжение
         this.stress = new Float32Array(this.m * this.n);
         this.initializeStress();
+
+        //инициализируем массив с информацией о том, сколько смежных ребер у каждой вершины
+        this.edges_per_node = new Array(this.m * this.n);
+        this.initializeEdgesPerNode();
 
         //инициализируем индексный массив для рисования ребер
         this.edge_index = new Uint16Array((this.m * (this.n - 1) + this.n * (this.m - 1)) * 2);
@@ -274,6 +316,10 @@ class ClothSimulator
         //инициализируем начальное напряжение
         this.stress = new Float32Array(this.m * this.n);
         this.initializeStress();
+
+        //инициализируем массив с информацией о том, сколько смежных ребер у каждой вершины
+        this.edges_per_node = new Array(this.m * this.n);
+        this.initializeEdgesPerNode();
 
         //инициализируем индексный массив для рисования ребер
         this.edge_index = new Uint16Array((this.m * (this.n - 1) + this.n * (this.m - 1)) * 2);
@@ -568,7 +614,7 @@ class ClothSimulator
         //diff1 и diff2 это коэффициенты растяжения/сжатия ребра
         //delta это вектор, идущий от одной вершины к другой
         //node_movement это вектор, на который мы сместим каждую из вершин
-        let delta_length, diff, diff2;
+        let delta_length, diff1, diff2;
         let delta = new Float32Array(2);
         let node_movement = new Float32Array(2);
 
@@ -607,12 +653,12 @@ class ClothSimulator
                         delta_length = Math.sqrt(delta_length);
 
                         //вычисляем коээфициент растяжения ребра между этими вершинами
-                        diff = (delta_length - this.distance_between_nodes) / delta_length;
+                        diff1 = (delta_length - this.distance_between_nodes) / delta_length;
 
                         //смещаем вершины друг к другу или друг от друга, чтобы расстояние между ними было правильным
                         for (let k = 0; k < 2; ++k)
                         {
-                            node_movement[k] = 0.5 * diff * delta[k];
+                            node_movement[k] = 0.5 * diff1 * delta[k];
                             this.coord[i * row_delta + j * column_delta + k] -= node_movement[k];
                             this.coord[i * row_delta + (j + 1) * column_delta + k] += node_movement[k];
                         }
@@ -639,7 +685,7 @@ class ClothSimulator
                         //если это последняя итерация, нужно обновить напряжения в текущем узле и его соседях справа и снизу
                         if (l == number_of_iterations - 1)
                         {
-                            this.calculateStress(i, j, diff, diff2);
+                            this.calculateStress(i, j, diff1, diff2);
                         }
                     }
 
@@ -655,12 +701,12 @@ class ClothSimulator
                         delta_length = Math.sqrt(delta_length);
 
                         //вычисляем коээфициент деформации ребра между этими вершинами
-                        diff = (delta_length - this.distance_between_nodes) / delta_length;
+                        diff1 = (delta_length - this.distance_between_nodes) / delta_length;
 
                         //смещаем вершины друг к другу или друг от друга, чтобы расстояние между ними было правильным
                         for (let k = 0; k < 2; ++k)
                         {
-                            node_movement[k] = 0.5 * diff * delta[k];
+                            node_movement[k] = 0.5 * diff1 * delta[k];
                             this.coord[i * row_delta + j * column_delta + k] -= node_movement[k];
                             this.coord[(i + 1) * row_delta + j * column_delta + k] += node_movement[k];
                         }
@@ -668,7 +714,7 @@ class ClothSimulator
                         //если это последняя итерация, нужно обновить напряжения в текущем узле и его соседе снизу
                         if (l == number_of_iterations - 1)
                         {
-                            this.calculateStress(i, j, diff, 0);
+                            this.calculateStress(i, j, diff1, 0);
                         }
                     }
 
@@ -684,12 +730,12 @@ class ClothSimulator
                         delta_length = Math.sqrt(delta_length);
 
                         //вычисляем коээфициент деформации ребра между этими вершинами
-                        diff = (delta_length - this.distance_between_nodes) / delta_length;
+                        diff1 = (delta_length - this.distance_between_nodes) / delta_length;
 
                         //смещаем вершины друг к другу или друг от друга, чтобы расстояние между ними было правильным
                         for (let k = 0; k < 2; ++k)
                         {
-                            node_movement[k] = 0.5 * diff * delta[k];
+                            node_movement[k] = 0.5 * diff1 * delta[k];
                             this.coord[i * row_delta + j * column_delta + k] -= node_movement[k];
                             this.coord[i * row_delta + (j + 1) * column_delta + k] += node_movement[k];
                         }
@@ -697,7 +743,7 @@ class ClothSimulator
                         //если это последняя итерация, нужно обновить напряжения в текущем узле и его соседе справа
                         if (l == number_of_iterations - 1)
                         {
-                            this.calculateStress(i, j, diff, 0);
+                            this.calculateStress(i, j, diff1, 0);
                         }
                     }
                 }
@@ -751,151 +797,35 @@ class ClothSimulator
         diff1 = Math.abs(diff1);
         diff2 = Math.abs(diff2);
 
+        //задаем смещение по по строкам массива с информацией о напряжении и массива с информацией о количестве ребер,
+        //смежных с каждой вершиной
+        let row_delta = this.m;
+
+
         //если вершина не находится в последней строке или в последнем столбце, то
         //нужно обновить напряжения в текущем узле и его соседях справа и снизу
         if (i != this.n - 1 && j != this.m - 1)
         {
-            //если текущий узел это узел с индексами (0;0), то из него выходит 2 ребра, а из его соседей по 3 ребра 
-            if (i == 0 && j == 0)
-            {
-                this.stress[i * this.m + j] += 0.5 * diff1;
-                this.stress[i * this.m + j] += 0.5 * diff2;
-                this.stress[i * this.m + j + 1] += 1. / 3. * diff1;
-                this.stress[(i + 1) * this.m + j] += 1. / 3. * diff2;
-            }
-
-            //если текущий узел это узел из первой строки, но не предпослений, то из него и его соседа справа
-            // выходит 3 узла, а из его соседа снизу - 4
-            if (i == 0 && j != 0 && j != this.m - 2)
-            {
-                this.stress[i * this.m + j] += 1. / 3. * diff1;
-                this.stress[i * this.m + j] += 1. / 3. * diff2;
-                this.stress[i * this.m + j + 1] += 1. / 3. * diff1;
-                this.stress[(i + 1) * this.m + j] += 1. / 4. * diff2;
-            }
-
-            //если это предпоследний узел из первой строки, то из него выходит 3 ребра, из его соседа справа - 2
-            //а из его соседа снизу - 4
-            if (i == 0 && j != 0 && j == this.m - 2)
-            {
-                this.stress[i * this.m + j] += 1. / 3. * diff1;
-                this.stress[i * this.m + j] += 1. / 3. * diff2;
-                this.stress[i * this.m + j + 1] += 1. / 2. * diff1;
-                this.stress[(i + 1) * this.m + j] += 1. / 4. * diff2;
-            }
-
-            //если это узел из первого столбца, то из него выходит 3 узла, из его соседа справа - 4
-            //а из его соседа снизу - 3
-            if (i != 0 && j == 0)
-            {
-                this.stress[i * this.m + j] += 1. / 3. * diff1;
-                this.stress[i * this.m + j] += 1. / 3. * diff2;
-                this.stress[i * this.m + j + 1] += 1. / 4. * diff1;
-                this.stress[(i + 1) * this.m + j] += 1. / 3. * diff2;
-            }
-
-            //если текущий узел - внутрениий
-            if (i != 0 && j != 0)
-            {
-                //если текущий узел находится в предпоследней строке, но в не в предпоследнем столцке, то
-                //из его выходит 4 ребра, из его соседа справа - 4 ребра, а из его соседа снизу - 3 ребра
-                if (i == this.n - 2 && j != this.m - 2)
-                {
-                    this.stress[i * this.m + j] += 1. / 4. * diff1;
-                    this.stress[i * this.m + j] += 1. / 4. * diff2;
-                    this.stress[i * this.m + j + 1] += 1. / 4. * diff1;
-                    this.stress[(i + 1) * this.m + j] += 1. / 3. * diff2;
-
-                }
-
-                //если текущий узел находится в предпоследнем столбце, но не в предпоследней строке, то 
-                //из его выходит 4 ребра, из его соседа справа - 3 ребра, а из его соседа снизу - 4 ребра
-                if (i != this.n - 2 && j == this.m - 2)
-                {
-                    this.stress[i * this.m + j] += 1. / 4. * diff1;
-                    this.stress[i * this.m + j] += 1. / 4. * diff2;
-                    this.stress[i * this.m + j + 1] += 1. / 3. * diff1;
-                    this.stress[(i + 1) * this.m + j] += 1. / 4. * diff2;
-                }
-
-                //если текущий узел находится в не предпоследнем столбце и не в предпоследней строке, то
-                //из него и его соседей выходит по 4 узла
-                if (i != this.n - 2 && j != this.m - 2)
-                {
-                    this.stress[i * this.m + j] += 1. / 4. * diff1;
-                    this.stress[i * this.m + j] += 1. / 4. * diff2;
-                    this.stress[i * this.m + j + 1] += 1. / 4. * diff1;
-                    this.stress[(i + 1) * this.m + j] += 1. / 4. * diff2;
-                }
-
-                //если текущий узел находится в  предпоследнем столбце и в предпоследней строке, то
-                //из него выходит 4 узла, а из его соседей справа и снизу по 3
-                if (i != this.n - 2 && j != this.m - 2)
-                {
-                    this.stress[i * this.m + j] += 1. / 4. * diff1;
-                    this.stress[i * this.m + j] += 1. / 4. * diff2;
-                    this.stress[i * this.m + j + 1] += 1. / 3. * diff1;
-                    this.stress[(i + 1) * this.m + j] += 1. / 3. * diff2;
-                }
-            }
+            this.stress[i * row_delta + j] += 1. / this.edges_per_node[i * row_delta + j] * diff1;
+            this.stress[i * row_delta + j] += 1. / this.edges_per_node[i * row_delta + j] * diff2;
+            this.stress[i * row_delta + j + 1] += 1. / this.edges_per_node[i * row_delta + j + 1] * diff1;
+            this.stress[(i + 1) * row_delta + j] += 1. / this.edges_per_node[(i + 1) * row_delta + j] * diff2;
         }
 
         //если текущий узел из последнего столбца, но не из последней строки, то
         //нужно обновить напряжения в текущем узле и его соседе снизу
         if (i != this.n - 1 && j == this.m - 1)
         {
-            //если этот узел находится в правом-верхнем углу сетки, но из него выходит 2 ребра, 
-            //а из его соседа снизу - 3
-            if (i == 0)
-            {
-                this.stress[i * this.m + j] += 1. / 2. * diff1;
-                this.stress[(i + 1) * this.m + j] += 1. / 3. * diff1;
-            }
-
-            //если этот узел находится в последнем столбце но не в первой и не в предпоследней 
-            //строке, то из него и из его соседа снизу выходит по 3 ребра 
-            if (i != 0 && i != this.n - 2)
-            {
-                this.stress[i * this.m + j] += 1. / 3. * diff1;
-                this.stress[(i + 1) * this.m + j] += 1. / 3. * diff1;
-            }
-
-            //если этот узел находится в последнем столбце и в предпоследней строке, то 
-            //из него выходит три ребра, а из его соседа снизу - 2
-            if (i == this.n - 2)
-            {
-                this.stress[i * this.m + j] += 1. / 3. * diff1;
-                this.stress[(i + 1) * this.m + j] += 1. / 2. * diff1;
-            }
+            this.stress[i * row_delta + j] += 1. / this.edges_per_node[i * row_delta + j] * diff1;
+            this.stress[(i + 1) * row_delta + j] += 1. / this.edges_per_node[(i + 1) * row_delta + j] * diff1;
         }
 
         //если текущий узел из последней строки, но не из последнего столбца, то
         //нужно обновить напряжения в текущем узле и его соседе справа
         if (i == this.n - 1 && j != this.m - 1)
         {
-            //если этот узел находится в левом-нижнем углу сетки, но из него выходит 2 ребра, 
-            //а из его соседа справа - 3
-            if (j == 0)
-            {
-                this.stress[i * this.m + j] += 1. / 2. * diff1;
-                this.stress[i * this.m + j + 1] += 1. / 3. * diff1;
-            }
-
-            //если этот узел находится в последней строке но не в первом и не в предпоследнем 
-            //столбце, то из него и из его соседа справа выходит по 3 ребра 
-            if (j != 0 && j != this.m - 2)
-            {
-                this.stress[i * this.m + j] += 1. / 3. * diff1;
-                this.stress[i * this.m + j + 1] += 1. / 3. * diff1;
-            }
-
-            //если этот узел находится в последней строке и в предпоследнем столбце, то 
-            //из него выходит три ребра, а из его соседа справа - 2
-            if (j == this.m - 2)
-            {
-                this.stress[i * this.m + j] += 2. / 3. * diff1;
-                this.stress[i * this.m + j + 1] += 1. / 2. * diff2;
-            }
+            this.stress[i * row_delta + j] += 1. / this.edges_per_node[i * row_delta + j] * diff1;
+            this.stress[i * row_delta + j + 1] += 1. / this.edges_per_node[i * row_delta + j + 1] * diff1;
         }
     }
 
