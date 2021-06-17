@@ -681,12 +681,6 @@ class ClothSimulator
                             this.coord[i * row_delta + j * column_delta + k] -= node_movement[k];
                             this.coord[(i + 1) * row_delta + j * column_delta + k] += node_movement[k];
                         }
-
-                        //если это последняя итерация, нужно обновить напряжения в текущем узле и его соседях справа и снизу
-                        if (l == number_of_iterations - 1)
-                        {
-                            this.calculateStress(i, j, diff1, diff2);
-                        }
                     }
 
                     //если текущий узел из последнего столбца, но не из последней сроки
@@ -709,12 +703,6 @@ class ClothSimulator
                             node_movement[k] = 0.5 * diff1 * delta[k];
                             this.coord[i * row_delta + j * column_delta + k] -= node_movement[k];
                             this.coord[(i + 1) * row_delta + j * column_delta + k] += node_movement[k];
-                        }
-
-                        //если это последняя итерация, нужно обновить напряжения в текущем узле и его соседе снизу
-                        if (l == number_of_iterations - 1)
-                        {
-                            this.calculateStress(i, j, diff1, 0);
                         }
                     }
 
@@ -739,12 +727,12 @@ class ClothSimulator
                             this.coord[i * row_delta + j * column_delta + k] -= node_movement[k];
                             this.coord[i * row_delta + (j + 1) * column_delta + k] += node_movement[k];
                         }
+                    }
 
-                        //если это последняя итерация, нужно обновить напряжения в текущем узле и его соседе справа
-                        if (l == number_of_iterations - 1)
-                        {
-                            this.calculateStress(i, j, diff1, 0);
-                        }
+                    //если это последняя итерация, нужно обновить напряжения в текущем и его соседях
+                    if (l == number_of_iterations - 1)
+                    {
+                        this.calculateStress(i, j, diff1, diff2);
                     }
                 }
             }
@@ -764,31 +752,8 @@ class ClothSimulator
             }
         }
 
-        //надем вершину с максимальным напряжением
-        let max_stress = 0;
-        for (let i = 0; i < this.n * this.m; ++i)
-        {
-            if (this.stress[i] > max_stress) max_stress = this.stress[i];
-        }
-
-        //вычислим нормировочный коэффициент
-        let coeff = 1 / max_stress;
-
-        //вычилим смещения по строке и по столбцу в массиве цветов
-        let color_row_delta = 3 * this.m;
-        let color_column_delta = 3;
-
-        //пройдем по массиву цветов и для каждой вершины на основании напряжения в ней выберем цвет в пределах
-        //от красного до синего
-        for (let i = 0; i < this.n; ++i)
-        {
-            for (let j = 0; j < this.m; ++j)
-            {
-                this.color[i * color_row_delta + j * color_column_delta] = this.stress[i * this.m + j] * coeff;
-                this.color[i * color_row_delta + j * color_column_delta + 1] = 0;
-                this.color[i * color_row_delta + j * color_column_delta + 2] = 1 - this.stress[i * this.m + j] * coeff;
-            }
-        }
+        //теперь вычислим цвета вершин, основываясь на напряжении в них
+        this.calculateColors();
     }
 
     calculateStress(i, j, diff1, diff2)
@@ -800,7 +765,6 @@ class ClothSimulator
         //задаем смещение по по строкам массива с информацией о напряжении и массива с информацией о количестве ребер,
         //смежных с каждой вершиной
         let row_delta = this.m;
-
 
         //если вершина не находится в последней строке или в последнем столбце, то
         //нужно обновить напряжения в текущем узле и его соседях справа и снизу
@@ -826,6 +790,36 @@ class ClothSimulator
         {
             this.stress[i * row_delta + j] += 1. / this.edges_per_node[i * row_delta + j] * diff1;
             this.stress[i * row_delta + j + 1] += 1. / this.edges_per_node[i * row_delta + j + 1] * diff1;
+        }
+    }
+
+    //функция, вычисляющая цвета вершин
+    calculateColors()
+    {
+        //надем вершину с максимальным напряжением
+        let max_stress = 0;
+        for (let i = 0; i < this.n * this.m; ++i)
+        {
+            if (this.stress[i] > max_stress) max_stress = this.stress[i];
+        }
+
+        //вычислим нормировочный коэффициент
+        let coeff = 1 / max_stress;
+
+        //вычилим смещения по строке и по столбцу в массиве цветов
+        let color_row_delta = 3 * this.m;
+        let color_column_delta = 3;
+
+        //пройдем по массиву цветов и для каждой вершины на основании напряжения в ней выберем цвет в пределах
+        //от красного до синего
+        for (let i = 0; i < this.n; ++i)
+        {
+            for (let j = 0; j < this.m; ++j)
+            {
+                this.color[i * color_row_delta + j * color_column_delta] = this.stress[i * this.m + j] * coeff;
+                this.color[i * color_row_delta + j * color_column_delta + 1] = 0;
+                this.color[i * color_row_delta + j * color_column_delta + 2] = 1 - this.stress[i * this.m + j] * coeff;
+            }
         }
     }
 
@@ -907,7 +901,7 @@ function main()
     let row_delta = 2 * m;
     let column_delta = 2;
 
-    //заполняем массивы
+    //заполняем массивы координат
     for (let i = 0; i < n; ++i)
     {
         for (let j = 0; j < m; ++j)
